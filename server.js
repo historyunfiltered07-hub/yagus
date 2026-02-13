@@ -11,7 +11,7 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 app.post('/chat', async (req, res) => {
     const { message } = req.body;
     const response = await openai.chat.completions.create({
-        model: "gpt-3.5-turbo",
+model: "gpt-4o-mini",
         messages: [{ role: "system", content: "You are a helpful pet store assistant for The Furry Nest." }, { role: "user", content: message }],
     });
     res.json({ reply: response.choices[0].message.content });
