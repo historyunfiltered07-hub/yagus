@@ -17,7 +17,7 @@ app.post('/chat', async (req, res) => {
         const { message } = req.body;
         
         const response = await openai.chat.completions.create({
-            model: "llama3-8b-8192", // Groq's super fast, free model
+            model: "llama-3.1-8b-instant", // 👇 The brand new, supported free model! 👇
             messages: [
                 { 
                     role: "system", 
@@ -34,6 +34,6 @@ app.post('/chat', async (req, res) => {
     }
 });
 
-// Render assigns a dynamic port, so this line is crucial
+// Render assigns a dynamic port
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
