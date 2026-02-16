@@ -12,12 +12,13 @@ const openai = new OpenAI({
     baseURL: "https://api.groq.com/openai/v1" 
 });
 
+// 👇 YOUR EXISTING CHAT ENDPOINT (Unchanged) 👇
 app.post('/chat', async (req, res) => {
     try {
         const { message } = req.body;
         
         const response = await openai.chat.completions.create({
-            model: "llama-3.1-8b-instant", // 👇 The brand new, supported free model! 👇
+            model: "llama-3.1-8b-instant",
             messages: [
                 { 
                     role: "system", 
@@ -31,6 +32,39 @@ app.post('/chat', async (req, res) => {
     } catch (error) {
         console.error("AI Error:", error);
         res.status(500).json({ reply: "Oops! Our AI is taking a nap. Try again later." });
+    }
+});
+
+// 👇 YOUR BRAND NEW GENERATIVE UI ENDPOINT 👇
+app.post('/voice-health', async (req, res) => {
+    try {
+        const { symptoms } = req.body;
+        
+        // The Super Brain prompt that tells the AI to act like a web developer
+        const superBrainPrompt = `You are a virtual vet assistant and expert web developer for TheFurrynest.store. 
+        A user just reported these symptoms for their pet: "${symptoms}".
+        Generate a short, helpful UI component in raw HTML. 
+        
+        RULES:
+        1. Start with a strict "⚠️ Consult your Vet" warning formatted in red.
+        2. List the top remedies and medicines found across the web for this issue.
+        3. Suggest an in-store product category they should check.
+        4. Format the entire response beautifully in HTML, using the color #AE918B for borders and accents.
+        5. Return ONLY raw HTML code. Do NOT wrap it in markdown blocks like \`\`\`html.`;
+
+        const response = await openai.chat.completions.create({
+            model: "llama-3.1-8b-instant", 
+            messages: [
+                { role: "system", content: "You are an AI that only outputs raw, valid HTML code." },
+                { role: "user", content: superBrainPrompt }
+            ],
+        });
+        
+        // Send the newly built HTML page back to Shopify
+        res.json({ html: response.choices[0].message.content });
+    } catch (error) {
+        console.error("Generative UI Error:", error);
+        res.status(500).json({ html: "<p style='color:red;'>Brain freeze! The AI needs a nap. Check your server logs.</p>" });
     }
 });
 
