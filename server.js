@@ -35,12 +35,12 @@ app.post('/chat', async (req, res) => {
     }
 });
 
-// 👇 YOUR UPDATED GENERATIVE UI ENDPOINT 👇
+// 👇 YOUR UPDATED GENERATIVE UI ENDPOINT (With fixed fonts and colors!) 👇
 app.post('/voice-health', async (req, res) => {
     try {
         const { symptoms } = req.body;
         
-        // The upgraded Super Brain prompt for long details and Amazon/Chewy portals!
+        // The upgraded Super Brain prompt with strict brand styling rules!
         const superBrainPrompt = `You are a virtual vet assistant and expert web developer for TheFurrynest.store. 
         A user just reported these symptoms for their pet: "${symptoms}".
         Generate a comprehensive, highly detailed UI component in raw HTML. 
@@ -49,14 +49,19 @@ app.post('/voice-health', async (req, res) => {
         1. Start with a strict "⚠️ Consult your Vet" warning formatted in red.
         2. Provide a long, detailed overview of the possible causes for these symptoms. Write at least two full paragraphs.
         3. List the top remedies and medicines found across the web for this issue, explaining *why* they work in deep detail.
-        4. You MUST include actual HTML clickable buttons for these specific medicines. The buttons MUST link OUT directly to Amazon or Chewy so they can buy them. Use an Amazon Search link format for these buttons like this: href="https://www.amazon.com/s?k=[insert+medicine+name+with+plus+signs]" or a Chewy search link like this: href="https://www.chewy.com/s?query=[insert+medicine+name+with+plus+signs]"
-        5. Format the entire response beautifully in HTML, using the color #AE918B for borders and accents. Make it look like a professional medical report.
-        6. Return ONLY raw HTML code. Do NOT wrap it in markdown blocks like \`\`\`html.`;
+        4. You MUST include actual HTML clickable buttons for these specific medicines linking to Amazon or Chewy search links.
+        
+        CRITICAL STYLING RULES:
+        5. Wrap the ENTIRE generated output inside a main container div with this style: style="font-family: 'Bagel Fat One', cursive, sans-serif; border: 3px solid #AE918B; padding: 25px; border-radius: 15px; background-color: #fffaf9;"
+        6. Use color #AE918B for all headings (h2, h3).
+        7. Style ALL product link buttons with this exact style so they are NOT green: style="background-color: #AE918B; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-size: 18px; display: inline-block; margin: 10px 5px;"
+
+        8. Return ONLY raw HTML code. Do NOT wrap it in markdown blocks like \`\`\`html.`;
 
         const response = await openai.chat.completions.create({
             model: "llama-3.1-8b-instant", 
             messages: [
-                { role: "system", content: "You are an AI that only outputs raw, valid HTML code." },
+                { role: "system", content: "You are an AI that only outputs raw, valid HTML code following strict CSS rules." },
                 { role: "user", content: superBrainPrompt }
             ],
         });
