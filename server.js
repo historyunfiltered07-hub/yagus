@@ -35,22 +35,23 @@ app.post('/chat', async (req, res) => {
     }
 });
 
-// 👇 YOUR BRAND NEW GENERATIVE UI ENDPOINT 👇
+// 👇 YOUR UPDATED GENERATIVE UI ENDPOINT 👇
 app.post('/voice-health', async (req, res) => {
     try {
         const { symptoms } = req.body;
         
-        // The Super Brain prompt that tells the AI to act like a web developer
+        // The upgraded Super Brain prompt for long details and Amazon/Chewy portals!
         const superBrainPrompt = `You are a virtual vet assistant and expert web developer for TheFurrynest.store. 
         A user just reported these symptoms for their pet: "${symptoms}".
-        Generate a short, helpful UI component in raw HTML. 
+        Generate a comprehensive, highly detailed UI component in raw HTML. 
         
         RULES:
         1. Start with a strict "⚠️ Consult your Vet" warning formatted in red.
-        2. List the top remedies and medicines found across the web for this issue.
-        3. Suggest an in-store product category they should check.
-        4. Format the entire response beautifully in HTML, using the color #AE918B for borders and accents.
-        5. Return ONLY raw HTML code. Do NOT wrap it in markdown blocks like \`\`\`html.`;
+        2. Provide a long, detailed overview of the possible causes for these symptoms. Write at least two full paragraphs.
+        3. List the top remedies and medicines found across the web for this issue, explaining *why* they work in deep detail.
+        4. You MUST include actual HTML clickable buttons for these specific medicines. The buttons MUST link OUT directly to Amazon or Chewy so they can buy them. Use an Amazon Search link format for these buttons like this: href="https://www.amazon.com/s?k=[insert+medicine+name+with+plus+signs]" or a Chewy search link like this: href="https://www.chewy.com/s?query=[insert+medicine+name+with+plus+signs]"
+        5. Format the entire response beautifully in HTML, using the color #AE918B for borders and accents. Make it look like a professional medical report.
+        6. Return ONLY raw HTML code. Do NOT wrap it in markdown blocks like \`\`\`html.`;
 
         const response = await openai.chat.completions.create({
             model: "llama-3.1-8b-instant", 
