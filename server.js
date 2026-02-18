@@ -36,99 +36,141 @@ app.post('/chat', async (req, res) => {
     }
 });
 
-// 👇 EXISTING SUPER BRAIN UI ENDPOINT 👇
+// 👇 UPDATED HEALTH ASSISTANT (Fixed Links for India) 👇
 app.post('/voice-health', async (req, res) => {
     try {
         const { symptoms } = req.body;
-        const superBrainPrompt = `You are a vet assistant. Create a detailed HTML report for symptoms: "${symptoms}".
+        
+        // 🔴 FIX: I changed the prompt to force Amazon.in and Flipkart search links
+        const superBrainPrompt = `You are a virtual vet assistant and expert web developer for TheFurrynest.store. 
+        A user just reported these symptoms for their pet: "${symptoms}".
+        Generate a comprehensive, highly detailed UI component in raw HTML. 
+        
         RULES:
-        1. "⚠️ Consult your Vet" warning in red.
-        2. Detailed causes and remedies.
-        3. STYLE: style="font-family: 'Bagel Fat One', cursive; border: 3px solid #AE918B; padding: 25px; border-radius: 15px; background-color: #fffaf9;"
-        4. BUTTONS: style="background-color: #AE918B; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px;"
-        5. Return ONLY raw HTML.`;
+        1. Start with a strict "⚠️ Consult your Vet" warning formatted in red.
+        2. Provide a long, detailed overview of the possible causes for these symptoms. Write at least two full paragraphs.
+        3. List the top remedies and medicines found across the web for this issue.
+        
+        4. LINKING RULE (CRITICAL):
+           - You MUST create buttons for the recommended remedies.
+           - The buttons MUST link to a SEARCH PAGE on Amazon India or Flipkart.
+           - Format: <a href="https://www.amazon.in/s?k=YOUR_REMEDY_KEYWORD" target="_blank">Buy on Amazon</a>
+           - Format: <a href="https://www.flipkart.com/search?q=YOUR_REMEDY_KEYWORD" target="_blank">Buy on Flipkart</a>
+           - NEVER generate direct product links (they break). ALWAYS use search links.
+        
+        CRITICAL STYLING RULES:
+        5. Wrap the ENTIRE generated output inside a main container div with this style: style="font-family: 'Bagel Fat One', cursive, sans-serif; border: 3px solid #AE918B; padding: 25px; border-radius: 15px; background-color: #fffaf9;"
+        6. Use color #AE918B for all headings (h2, h3).
+        7. Style ALL product link buttons with this exact style so they are NOT green: style="background-color: #AE918B; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-size: 18px; display: inline-block; margin: 10px 5px;"
+
+        8. Return ONLY raw HTML code. Do NOT wrap it in markdown blocks like \`\`\`html.`;
 
         const response = await openai.chat.completions.create({
             model: "llama-3.1-8b-instant", 
-            messages: [{ role: "user", content: superBrainPrompt }],
+            messages: [
+                { role: "system", content: "You are an AI that only outputs raw, valid HTML code following strict CSS rules." },
+                { role: "user", content: superBrainPrompt }
+            ],
         });
+        
         res.json({ html: response.choices[0].message.content });
     } catch (error) {
-        res.status(500).json({ html: "<p>Error generating report.</p>" });
+        console.error("Health AI Error:", error);
+        res.status(500).json({ html: "<p style='color:red;'>Brain freeze! The AI needs a nap. Check your server logs.</p>" });
     }
 });
 
-// 👇 NEW: DUAL UPLOAD TRY-ON ENDPOINT 👇
-// We use upload.fields to accept two specific files
+// 👇 ROBUST TRY-ON ENDPOINT (With Resize & Fallback) 👇
 app.post('/try-on', upload.fields([{ name: 'pet_image' }, { name: 'cloth_image' }]), async (req, res) => {
+  console.log("Try-on request started...");
+
+  // cleanup helper
+  const cleanup = () => {
+    if (req.files?.['pet_image']) fs.unlinkSync(req.files['pet_image'][0].path);
+    if (req.files?.['cloth_image']) fs.unlinkSync(req.files['cloth_image'][0].path);
+  };
+
   try {
-    // 1. Check if both files exist
-    if (!req.files['pet_image'] || !req.files['cloth_image']) {
-        return res.status(400).send("Please upload both a pet photo and a clothing photo.");
+    if (!req.files || !req.files['pet_image'] || !req.files['cloth_image']) {
+        return res.status(400).send("Both images are required.");
     }
 
     const petPath = req.files['pet_image'][0].path;
     const clothPath = req.files['cloth_image'][0].path;
 
-    // 2. Prepare Pet Image for AI (to find the neck)
-    const imageBuffer = fs.readFileSync(petPath);
-    const base64Image = imageBuffer.toString('base64');
+    // 1. Shrink Image for AI (Groq can't handle huge 4MB iphone photos)
+    const smallBuffer = await sharp(petPath)
+        .resize({ width: 500 }) // Resize to 500px width max
+        .jpeg({ quality: 70 })
+        .toBuffer();
+    
+    const base64Image = smallBuffer.toString('base64');
     const dataUrl = `data:image/jpeg;base64,${base64Image}`;
 
-    // 3. Ask AI for coordinates
-    const chatCompletion = await openai.chat.completions.create({
-      model: "llama-3.2-11b-vision-preview", 
-      messages: [
-        {
-          role: "user",
-          content: [
-            { type: "text", text: "Locate the center of the dog/cat's neck/chest area. Return ONLY a JSON object with keys: x (number), y (number), and width (number, representing the neck width). Do not write any other text." },
-            { type: "image_url", image_url: { url: dataUrl } }
+    // 2. Default Coordinates (Center) - The "Fallback"
+    const metadata = await sharp(petPath).metadata();
+    let x = Math.round(metadata.width / 2);
+    let y = Math.round(metadata.height / 2);
+
+    // 3. Try to ask AI (Vision)
+    try {
+        console.log("Asking Llama Vision...");
+        const chatCompletion = await openai.chat.completions.create({
+          model: "llama-3.2-11b-vision-preview", 
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: "Locate the center of the animal's neck. Return ONLY JSON: {\"x\": number, \"y\": number}. Coordinates must be relative to a 500px wide image." },
+                { type: "image_url", image_url: { url: dataUrl } }
+              ],
+            },
           ],
-        },
-      ],
-      response_format: { type: "json_object" }
-    });
+          max_tokens: 50,
+          response_format: { type: "json_object" }
+        });
 
-    const visionData = JSON.parse(chatCompletion.choices[0].message.content);
-    const { x, y, width } = visionData;
+        const rawContent = chatCompletion.choices[0].message.content;
+        const visionData = JSON.parse(rawContent);
 
-    // 4. Process Images with Sharp
-    const petMeta = await sharp(petPath).metadata();
-    
-    // Calculate resize width for the cloth
-    // If AI fails to give width, default to 40% of pet image width
-    const targetWidth = width ? parseInt(width * 1.5) : Math.round(petMeta.width * 0.4);
+        // Scale coordinates back up to full size
+        const scaleFactor = metadata.width / 500;
+        
+        if (visionData.x && visionData.y) {
+            x = Math.round(visionData.x * scaleFactor);
+            y = Math.round(visionData.y * scaleFactor);
+            console.log(`AI found neck at: ${x}, ${y}`);
+        }
 
-    // Resize the uploaded cloth image
+    } catch (aiError) {
+        console.error("⚠️ AI Vision Failed (Using Center Fallback):", aiError.message);
+    }
+
+    // 4. Process Final Image
+    const targetWidth = Math.round(metadata.width * 0.5); // Make cloth 50% of pet width
+
     const resizedCloth = await sharp(clothPath)
       .resize({ width: targetWidth })
       .toBuffer();
 
     const clothMeta = await sharp(resizedCloth).metadata();
 
-    // Calculate position (Center cloth on the neck coordinates)
     const left = Math.round(x - (clothMeta.width / 2));
-    const top = Math.round(y - (clothMeta.height / 2)); // Adjust this if you want it lower/higher
+    const top = Math.round(y - (clothMeta.height / 2));
 
-    // Composite
     const finalImage = await sharp(petPath)
       .composite([{ input: resizedCloth, left: left, top: top }])
       .toBuffer();
 
-    // 5. Cleanup & Send
-    fs.unlinkSync(petPath);
-    fs.unlinkSync(clothPath);
-    
+    // 5. Send back
+    cleanup();
     res.set('Content-Type', 'image/png');
     res.send(finalImage);
 
   } catch (error) {
-    console.error("Try-On Error:", error);
-    // Cleanup files if they exist
-    if (req.files['pet_image']) fs.unlinkSync(req.files['pet_image'][0].path);
-    if (req.files['cloth_image']) fs.unlinkSync(req.files['cloth_image'][0].path);
-    res.status(500).send({ error: "Failed to process image" });
+    console.error("CRITICAL SERVER ERROR:", error);
+    cleanup();
+    res.status(500).send({ error: error.message });
   }
 });
 
