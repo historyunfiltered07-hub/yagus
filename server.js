@@ -1,12 +1,20 @@
 const express = require('express');
 const { OpenAI } = require('openai');
 const cors = require('cors');
+const multer = require('multer'); // Handles image uploads
+const sharp = require('sharp');   // Handles image editing
+const axios = require('axios');   // Downloads images
+const fs = require('fs');         // Reads files
+const path = require('path');
 
 const app = express();
+// Configure Multer to save uploaded files temporarily
+const upload = multer({ dest: 'uploads/' });
+
 app.use(express.json());
 app.use(cors()); // Allows your Shopify store to talk to this server
 
-// Pointing the OpenAI library to Groq's free servers
+// Pointing the OpenAI library to Groq's servers
 const openai = new OpenAI({ 
     apiKey: process.env.GROQ_API_KEY, 
     baseURL: "https://api.groq.com/openai/v1" 
@@ -35,12 +43,11 @@ app.post('/chat', async (req, res) => {
     }
 });
 
-// 👇 YOUR UPDATED GENERATIVE UI ENDPOINT (With fixed fonts and colors!) 👇
+// 👇 YOUR EXISTING GENERATIVE UI ENDPOINT (Styles Preserved!) 👇
 app.post('/voice-health', async (req, res) => {
     try {
         const { symptoms } = req.body;
         
-        // The upgraded Super Brain prompt with strict brand styling rules!
         const superBrainPrompt = `You are a virtual vet assistant and expert web developer for TheFurrynest.store. 
         A user just reported these symptoms for their pet: "${symptoms}".
         Generate a comprehensive, highly detailed UI component in raw HTML. 
@@ -66,12 +73,84 @@ app.post('/voice-health', async (req, res) => {
             ],
         });
         
-        // Send the newly built HTML page back to Shopify
         res.json({ html: response.choices[0].message.content });
     } catch (error) {
         console.error("Generative UI Error:", error);
         res.status(500).json({ html: "<p style='color:red;'>Brain freeze! The AI needs a nap. Check your server logs.</p>" });
     }
+});
+
+// 👇 NEW: VIRTUAL TRY-ON ENDPOINT 👇
+app.post('/try-on', upload.single('pet_image'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).send("No image uploaded.");
+    
+    const petImagePath = req.file.path;
+    const productImageUrl = req.body.product_image_url;
+
+    // 1. Prepare Image for Groq Vision
+    const imageBuffer = fs.readFileSync(petImagePath);
+    const base64Image = imageBuffer.toString('base64');
+    const dataUrl = `data:image/jpeg;base64,${base64Image}`;
+
+    // 2. Ask Groq (Llama 3.2 Vision) for coordinates
+    // We ask it to find the neck to place a collar/bandana
+    const chatCompletion = await openai.chat.completions.create({
+      model: "llama-3.2-11b-vision-preview", 
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Locate the center of the dog's neck in this image. Return ONLY a JSON object with keys: x (number), y (number), and width (number, representing the approximate width of the neck). Do not write any other text." },
+            { type: "image_url", image_url: { url: dataUrl } }
+          ],
+        },
+      ],
+      response_format: { type: "json_object" }
+    });
+
+    const visionData = JSON.parse(chatCompletion.choices[0].message.content);
+    const { x, y, width } = visionData;
+
+    // 3. Download the Product Image (from Shopify)
+    const productResponse = await axios.get(productImageUrl, { responseType: 'arraybuffer' });
+    let productBuffer = Buffer.from(productResponse.data, 'binary');
+
+    // 4. Process Images with Sharp
+    // Get pet image metadata to calculate relative sizing
+    const metadata = await sharp(petImagePath).metadata();
+    
+    // Safety check: If AI fails to give width, guess 30% of image width
+    const targetWidth = width || Math.round(metadata.width * 0.3);
+    
+    // Resize product to fit the neck
+    const resizedProduct = await sharp(productBuffer)
+      .resize({ width: parseInt(targetWidth) })
+      .toBuffer();
+
+    const productMeta = await sharp(resizedProduct).metadata();
+
+    // Calculate centering logic
+    // We want the center of the product to be at the (x,y) the AI found
+    const left = Math.round(x - (productMeta.width / 2));
+    const top = Math.round(y - (productMeta.height / 2));
+
+    // Composite (Paste) the product on top
+    const finalImage = await sharp(petImagePath)
+      .composite([{ input: resizedProduct, left: left, top: top }])
+      .toBuffer();
+
+    // 5. Clean up and Send back
+    fs.unlinkSync(petImagePath); // Delete the temp file
+    res.set('Content-Type', 'image/png');
+    res.send(finalImage);
+
+  } catch (error) {
+    console.error("Try-On Error:", error);
+    // If temp file exists, delete it
+    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+    res.status(500).send({ error: "Failed to process image" });
+  }
 });
 
 // Render assigns a dynamic port
